@@ -62,11 +62,62 @@ window.esailsZonweringWizard = (function () {
       toepassing: null,
       breedte: 120,
       hoogte: 100,
+      aantal: 1,
       kleur: "antraciet",
       afwerking: null,
       wil_reiniger: false,
+      configs: [],      // opgeslagen openingen (raam/balkon configuraties)
+      editIndex: -1,    // -1 = nieuwe opening; anders index die we bewerken
       bundle: {}
     };
+  }
+
+  /* Maakt een verse draft-config (begin van een nieuwe opening),
+     met behoud van de eerder gekozen kleur als prettige default. */
+  function nieuweOpening(behoudKleur) {
+    state.currentStep = 1;
+    state.toepassing = null;
+    state.breedte = 120;
+    state.hoogte = 100;
+    state.aantal = 1;
+    state.kleur = behoudKleur || "antraciet";
+    state.afwerking = null;
+    state.wil_reiniger = false;
+    state.editIndex = -1;
+  }
+
+  /* Slaat de huidige draft op als config (nieuw of overschrijven bij edit). */
+  function slaOpeningOp() {
+    var cfg = {
+      toepassing: state.toepassing,
+      breedte: Math.max(20, state.breedte),
+      hoogte: Math.max(20, state.hoogte),
+      aantal: Math.max(1, state.aantal),
+      kleur: state.kleur,
+      afwerking: state.afwerking,
+      wil_reiniger: state.wil_reiniger
+    };
+    if (state.editIndex >= 0 && state.configs[state.editIndex]) {
+      state.configs[state.editIndex] = cfg;
+    } else {
+      state.configs.push(cfg);
+    }
+    state.editIndex = -1;
+  }
+
+  /* Laadt een opgeslagen config terug in de draft om te bewerken. */
+  function bewerkOpening(i) {
+    var c = state.configs[i];
+    if (!c) return;
+    state.toepassing = c.toepassing;
+    state.breedte = c.breedte;
+    state.hoogte = c.hoogte;
+    state.aantal = c.aantal;
+    state.kleur = c.kleur;
+    state.afwerking = c.afwerking;
+    state.wil_reiniger = c.wil_reiniger;
+    state.editIndex = i;
+    state.currentStep = 1;
   }
 
   /* -------------------- HELPERS -------------------- */
@@ -77,25 +128,36 @@ window.esailsZonweringWizard = (function () {
   function ceilDiv(a, b) { return Math.ceil(a / b); }
 
   /* -------------------- REKENMODULE -------------------- */
-  function bereken() {
-    var b = Math.max(20, state.breedte);
-    var h = Math.max(20, state.hoogte);
+  /* Rekent voor één opening. Zonder argument: de live draft-state.
+     Het 'aantal' (meerdere identieke ramen) vermenigvuldigt alle hoeveelheden. */
+  function bereken(cfg) {
+    var src = cfg || state;
+    var b = Math.max(20, src.breedte);
+    var h = Math.max(20, src.hoogte);
+    var n = Math.max(1, src.aantal || 1);
+    var toep = src.toepassing;
+
     var doekBreedteCm = b + REKEN.zoomMargeCm * 2;
     var doekHoogteCm = h + REKEN.zoomMargeCm * 2;
     var banen = Math.max(1, ceilDiv(doekBreedteCm, REKEN.rolBreedteCm));
-    var doekMeters = Math.ceil((banen * doekHoogteCm) / 100 * 2) / 2;
+    var doekPer = Math.ceil((banen * doekHoogteCm) / 100 * 2) / 2;
+    var doekMeters = Math.round(doekPer * n * 2) / 2;
     var omtrekCm = 2 * (b + h);
-    var r = { doekMeters: doekMeters, banen: banen, omtrekCm: omtrekCm };
-    if (state.toepassing === 'raam') {
+    var r = { aantal: n, doekMeters: doekMeters, doekPer: doekPer, banen: banen, omtrekCm: omtrekCm };
+
+    if (toep === 'raam') {
       var iv = REKEN.zuignapIntervalCm;
-      var aantalZuignappen = (ceilDiv(b, iv) + ceilDiv(h, iv)) * 2;
-      r.zuignappen = aantalZuignappen;
-      r.zeilringen = aantalZuignappen;
-    } else if (state.toepassing === 'balkon') {
-      r.koordMeters = Math.ceil((omtrekCm * REKEN.koordSpanMargeFactor) / 100 * 2) / 2;
-      r.koordhaken = ceilDiv(omtrekCm, REKEN.koordHaakInterval);
-      r.zeilringen = r.koordhaken;
-      r.zoombandMeters = Math.ceil(omtrekCm / 100 * 2) / 2;
+      var zPer = (ceilDiv(b, iv) + ceilDiv(h, iv)) * 2;
+      r.zuignappen = zPer * n;
+      r.zeilringen = zPer * n;
+    } else if (toep === 'balkon') {
+      var koordPer = Math.ceil((omtrekCm * REKEN.koordSpanMargeFactor) / 100 * 2) / 2;
+      r.koordMeters = Math.round(koordPer * n * 2) / 2;
+      var haakPer = ceilDiv(omtrekCm, REKEN.koordHaakInterval);
+      r.koordhaken = haakPer * n;
+      r.zeilringen = haakPer * n;
+      var zoomPer = Math.ceil(omtrekCm / 100 * 2) / 2;
+      r.zoombandMeters = Math.round(zoomPer * n * 2) / 2;
     }
     return r;
   }
@@ -130,6 +192,7 @@ window.esailsZonweringWizard = (function () {
       '<p class="esails-step-subtitle">In centimeters. De preview hierboven beweegt direct mee terwijl je sleept.</p>' +
       sliderHTML('breedte','Breedte','cm',30,400,1) +
       sliderHTML('hoogte','Hoogte','cm',30,400,1) +
+      sliderHTML('aantal','Aantal van dit formaat','st',1,20,1) +
       '<p class="esails-help-note" id="ezAfmNote"></p>' +
     '</div>' +
 
@@ -159,7 +222,7 @@ window.esailsZonweringWizard = (function () {
     '<div class="esails-wizard-step" data-step="6">' +
       '<div class="esails-success-banner">' +
         '<h3>✓ Jouw materiaallijst is klaar!</h3>' +
-        '<p>Op basis van je keuzes hebben we het pakket op maat berekend. Pas de aantallen vrij aan met de plus- en minknoppen.</p>' +
+        '<p>Op basis van je keuzes hebben we het pakket op maat berekend. Je kunt elke opening nog wijzigen, verwijderen, of een raam of balkon toevoegen.</p>' +
       '</div>' +
       '<div class="esails-configuration-board">' +
         '<div class="esails-board-header"><span>Onderdeel</span><span style="text-align:right;">Aantal / Prijs</span></div>' +
@@ -334,82 +397,110 @@ window.esailsZonweringWizard = (function () {
     stats.innerHTML = html;
   }
 
-  /* -------------------- BUNDLE -------------------- */
-  function bouwBundle() {
-    var r = bereken();
-    var doek = CONFIG.doek[state.kleur] || CONFIG.doek.antraciet;
-    var b = {};
-    b.doek = { id: doek.id, naam: doek.naam, notitie: 'UV-werend gaasdoek, op maat te knippen (rafelt niet)', prijs: doek.prijs, qty: r.doekMeters, unit: 'm', step: 0.5 };
+  /* -------------------- BUNDLE (per opening) -------------------- */
+  /* Bouwt de materiaalregels voor één config. Geeft een geordende array. */
+  function bouwBundleVoor(cfg) {
+    var r = bereken(cfg);
+    var doek = CONFIG.doek[cfg.kleur] || CONFIG.doek.antraciet;
+    var lijnen = [];
+    lijnen.push({ key: 'doek', id: doek.id, naam: doek.naam, notitie: 'UV-werend gaasdoek, op maat te knippen (rafelt niet)', prijs: doek.prijs, qty: r.doekMeters, unit: 'm' });
 
-    if (state.toepassing === 'raam') {
-      b.zuignap = { id: CONFIG.zuignap.id, naam: CONFIG.zuignap.naam, notitie: 'Houdt het doek strak tegen het glas — geen boren', prijs: CONFIG.zuignap.prijs, qty: r.zuignappen, unit: 'st', step: 1 };
-      b.zeilring = { id: CONFIG.zeilring.id, naam: CONFIG.zeilring.naam, notitie: 'Eén per zuignap — voorkomt uitscheuren', prijs: CONFIG.zeilring.prijs, qty: r.zeilringen, unit: 'st', step: 1 };
-      if (state.afwerking === 'set') {
-        b.montageset = { id: CONFIG.montageset.id, naam: CONFIG.montageset.naam, notitie: 'Holpijp + stempel om de zeilringen te zetten · gratis stansblok', prijs: CONFIG.montageset.prijs, qty: 1, unit: 'set', step: 1 };
+    if (cfg.toepassing === 'raam') {
+      lijnen.push({ key: 'zuignap', id: CONFIG.zuignap.id, naam: CONFIG.zuignap.naam, notitie: 'Houdt het doek strak tegen het glas — geen boren', prijs: CONFIG.zuignap.prijs, qty: r.zuignappen, unit: 'st' });
+      lijnen.push({ key: 'zeilring', id: CONFIG.zeilring.id, naam: CONFIG.zeilring.naam, notitie: 'Eén per zuignap — voorkomt uitscheuren', prijs: CONFIG.zeilring.prijs, qty: r.zeilringen, unit: 'st' });
+      if (cfg.afwerking === 'set') {
+        lijnen.push({ key: 'montageset', id: CONFIG.montageset.id, naam: CONFIG.montageset.naam, notitie: 'Holpijp + stempel om de zeilringen te zetten · gratis stansblok', prijs: CONFIG.montageset.prijs, qty: 1, unit: 'set' });
       }
-    } else if (state.toepassing === 'balkon') {
-      b.shockcord = { id: CONFIG.shockcord.id, naam: CONFIG.shockcord.naam, notitie: 'Spant het doek soepel langs de railing — beweegt mee met de wind', prijs: CONFIG.shockcord.prijs, qty: r.koordMeters, unit: 'm', step: 0.5 };
-      b.koordhaak = { id: CONFIG.koordhaak.id, naam: CONFIG.koordhaak.naam, notitie: 'Haakt het koord aan de spijlen of railing', prijs: CONFIG.koordhaak.prijs, qty: r.koordhaken, unit: 'st', step: 1 };
-      b.zeilring = { id: CONFIG.zeilring.id, naam: CONFIG.zeilring.naam, notitie: 'Bevestigingspunt in het doek voor het koord', prijs: CONFIG.zeilring.prijs, qty: r.zeilringen, unit: 'st', step: 1 };
-      if (state.afwerking === 'zoom') {
-        b.zoomband = { id: CONFIG.zoomband.id, naam: CONFIG.zoomband.naam, notitie: 'Versterkt de rand waar de zeilringen komen', prijs: CONFIG.zoomband.prijs, qty: r.zoombandMeters, unit: 'm', step: 0.5 };
+    } else if (cfg.toepassing === 'balkon') {
+      lijnen.push({ key: 'shockcord', id: CONFIG.shockcord.id, naam: CONFIG.shockcord.naam, notitie: 'Spant het doek soepel langs de railing — beweegt mee met de wind', prijs: CONFIG.shockcord.prijs, qty: r.koordMeters, unit: 'm' });
+      lijnen.push({ key: 'koordhaak', id: CONFIG.koordhaak.id, naam: CONFIG.koordhaak.naam, notitie: 'Haakt het koord aan de spijlen of railing', prijs: CONFIG.koordhaak.prijs, qty: r.koordhaken, unit: 'st' });
+      lijnen.push({ key: 'zeilring', id: CONFIG.zeilring.id, naam: CONFIG.zeilring.naam, notitie: 'Bevestigingspunt in het doek voor het koord', prijs: CONFIG.zeilring.prijs, qty: r.zeilringen, unit: 'st' });
+      if (cfg.afwerking === 'zoom') {
+        lijnen.push({ key: 'zoomband', id: CONFIG.zoomband.id, naam: CONFIG.zoomband.naam, notitie: 'Versterkt de rand waar de zeilringen komen', prijs: CONFIG.zoomband.prijs, qty: r.zoombandMeters, unit: 'm' });
       }
     }
-
-    if (state.wil_reiniger) b.reiniger = { id: CONFIG.reiniger.id, naam: CONFIG.reiniger.naam, notitie: 'Reinigt het gaasdoek zonder de coating aan te tasten', prijs: CONFIG.reiniger.prijs, qty: 1, unit: 'st', step: 1 };
-
-    state.bundle = b;
+    if (cfg.wil_reiniger) lijnen.push({ key: 'reiniger', id: CONFIG.reiniger.id, naam: CONFIG.reiniger.naam, notitie: 'Reinigt het gaasdoek zonder de coating aan te tasten', prijs: CONFIG.reiniger.prijs, qty: 1, unit: 'st' });
+    return lijnen;
   }
 
-  function renderLines() {
-    bouwBundle();
-    var container = $('ezDynamicLines'); if (!container) return;
-    var html = '';
-    Object.keys(state.bundle).forEach(function (key) {
-      var item = state.bundle[key];
-      var lineTotal = item.qty * item.prijs;
-      html += '<div class="esails-line-item" id="ez-line-' + key + '">' +
-        '<div class="esails-line-info"><h5>' + esc(item.naam) + '</h5><p>' + esc(item.notitie) + '</p></div>' +
-        '<div class="esails-line-controls">' +
-          '<div class="esails-counter">' +
-            '<button type="button" data-item-key="' + key + '" data-delta="-1">−</button>' +
-            '<input type="text" value="' + formatQty(item) + '" readonly>' +
-            '<button type="button" data-item-key="' + key + '" data-delta="1">+</button>' +
-          '</div>' +
-          '<div class="esails-line-price" id="ez-price-' + key + '">€ ' + money(lineTotal) + '</div>' +
-        '</div></div>';
+  function openingLabel(cfg, index) {
+    var basis = cfg.toepassing === 'balkon' ? 'Balkon' : 'Raam';
+    var aantal = cfg.aantal > 1 ? (' · ' + cfg.aantal + '×') : '';
+    return basis + ' ' + (index + 1) + ' · ' + cfg.breedte + ' × ' + cfg.hoogte + ' cm' + aantal;
+  }
+
+  /* Telt alle producten over alle openingen samen, per product-id. */
+  function geaggregeerdeRegels() {
+    var map = {};
+    var volgorde = [];
+    state.configs.forEach(function (cfg) {
+      bouwBundleVoor(cfg).forEach(function (ln) {
+        if (!map[ln.id]) {
+          map[ln.id] = { id: ln.id, naam: ln.naam, prijs: ln.prijs, unit: ln.unit, qty: 0 };
+          volgorde.push(ln.id);
+        }
+        map[ln.id].qty += ln.qty;
+      });
     });
-    container.innerHTML = html;
-    calcTotal();
+    return volgorde.map(function (id) { return map[id]; });
   }
+
   function formatQty(item) {
-    if (item.unit === 'm') return item.qty.toFixed(1) + ' m';
+    if (item.unit === 'm') return (Math.round(item.qty * 10) / 10).toFixed(1) + ' m';
     if (item.unit === 'set') return item.qty + ' set';
     return String(item.qty);
   }
-  function adjustQty(key, deltaSign) {
-    if (!state.bundle[key]) return;
-    var item = state.bundle[key];
-    var q = item.qty + deltaSign * (item.step || 1);
-    q = Math.round(q * 2) / 2;
-    if (q < 0) q = 0;
-    item.qty = q;
-    var line = $('ez-line-' + key);
-    if (line) {
-      var input = line.querySelector('input');
-      if (input) input.value = formatQty(item);
-      var priceEl = $('ez-price-' + key);
-      if (priceEl) priceEl.innerText = '€ ' + money(q * item.prijs);
-    }
+
+  /* -------------------- RESULTAAT RENDEREN -------------------- */
+  function renderLines() {
+    var container = $('ezDynamicLines'); if (!container) return;
+    var html = '';
+
+    // Per opening een blok met eigen kop, regels en subtotaal
+    state.configs.forEach(function (cfg, idx) {
+      var lijnen = bouwBundleVoor(cfg);
+      var sub = 0;
+      var rows = '';
+      lijnen.forEach(function (ln) {
+        var lt = ln.qty * ln.prijs; sub += lt;
+        rows += '<div class="esails-line-item">' +
+          '<div class="esails-line-info"><h5>' + esc(ln.naam) + '</h5><p>' + esc(ln.notitie) + '</p></div>' +
+          '<div class="esails-line-controls">' +
+            '<div class="esails-line-qty">' + formatQty(ln) + '</div>' +
+            '<div class="esails-line-price">€ ' + money(lt) + '</div>' +
+          '</div></div>';
+      });
+      html +=
+        '<div class="esails-opening-block">' +
+          '<div class="esails-opening-head">' +
+            '<span class="esails-opening-title">' + esc(openingLabel(cfg, idx)) + '</span>' +
+            '<span class="esails-opening-actions">' +
+              '<button type="button" class="esails-opening-edit" data-edit-index="' + idx + '">Wijzig</button>' +
+              (state.configs.length > 1 ? '<button type="button" class="esails-opening-remove" data-remove-index="' + idx + '">Verwijder</button>' : '') +
+            '</span>' +
+          '</div>' +
+          rows +
+          '<div class="esails-opening-subtotal">Subtotaal: <strong>€ ' + money(sub) + '</strong></div>' +
+        '</div>';
+    });
+
+    // "Nog een raam/balkon toevoegen"
+    html +=
+      '<div class="esails-add-opening">' +
+        '<button type="button" class="esails-btn esails-btn-secondary" id="ezAddOpening">+ Nog een raam of balkon toevoegen</button>' +
+      '</div>';
+
+    container.innerHTML = html;
     calcTotal();
   }
+
   function calcTotal() {
     var total = 0;
-    Object.keys(state.bundle).forEach(function (key) {
-      total += state.bundle[key].qty * state.bundle[key].prijs;
+    state.configs.forEach(function (cfg) {
+      bouwBundleVoor(cfg).forEach(function (ln) { total += ln.qty * ln.prijs; });
     });
     var el = $('ezTotalAmount');
-    if (el) el.innerText = '€ ' + money(total);
+    if (el) el.textContent = '€ ' + money(total);
   }
 
   /* -------------------- NAVIGATIE / VALIDATIE -------------------- */
@@ -450,6 +541,10 @@ window.esailsZonweringWizard = (function () {
   function ga(naarStap) {
     if (naarStap < 1) naarStap = 1;
     if (naarStap > RESULT_STEP) naarStap = RESULT_STEP;
+    // Bij het betreden van het resultaat: sla de huidige draft op als opening
+    if (naarStap === RESULT_STEP && state.currentStep === TOTAL_INPUT_STEPS) {
+      slaOpeningOp();
+    }
     state.currentStep = naarStap;
     toonStap(naarStap);
   }
@@ -489,9 +584,24 @@ window.esailsZonweringWizard = (function () {
         toggle.innerHTML = state[k] ? '<span class="esails-check">✓</span> Toegevoegd' : 'Toevoegen';
         return;
       }
-      var counterBtn = e.target.closest('.esails-counter button');
-      if (counterBtn) {
-        adjustQty(counterBtn.getAttribute('data-item-key'), parseInt(counterBtn.getAttribute('data-delta'), 10));
+      var editBtn = e.target.closest('[data-edit-index]');
+      if (editBtn) {
+        bewerkOpening(parseInt(editBtn.getAttribute('data-edit-index'), 10));
+        herstelDraftUI();
+        toonStap(1);
+        return;
+      }
+      var removeBtn = e.target.closest('[data-remove-index]');
+      if (removeBtn) {
+        var ri = parseInt(removeBtn.getAttribute('data-remove-index'), 10);
+        state.configs.splice(ri, 1);
+        renderLines();
+        return;
+      }
+      if (e.target.closest('#ezAddOpening')) {
+        nieuweOpening(state.kleur);
+        herstelDraftUI();
+        toonStap(1);
         return;
       }
       if (e.target.closest('#ezBtnNext')) { if (!$('ezBtnNext').disabled) ga(state.currentStep + 1); return; }
@@ -514,9 +624,9 @@ window.esailsZonweringWizard = (function () {
 
   /* -------------------- CART -------------------- */
   function addToCart() {
-    var keys = Object.keys(state.bundle).filter(function (k) { return state.bundle[k].qty > 0; });
-    if (!keys.length) { alert('Voeg minimaal één product toe.'); return; }
-    var placeholder = keys.some(function (k) { return /^ID_/.test(state.bundle[k].id); });
+    var regels = geaggregeerdeRegels().filter(function (r) { return r.qty > 0; });
+    if (!regels.length) { alert('Voeg minimaal één product toe.'); return; }
+    var placeholder = regels.some(function (r) { return /^ID_/.test(r.id); });
     if (placeholder) {
       alert('Let op: er staan nog placeholder product-ID\'s in de configuratie. Vul de echte Lightspeed-ID\'s in voordat je live gaat.');
       return;
@@ -528,8 +638,8 @@ window.esailsZonweringWizard = (function () {
     var iframe = ensureFrame();
     var i = 0;
     function addNext() {
-      if (i >= keys.length) { window.location.href = '/cart'; return; }
-      var item = state.bundle[keys[i]]; i++;
+      if (i >= regels.length) { window.location.href = '/cart'; return; }
+      var item = regels[i]; i++;
       postOne(iframe, item.id, Math.ceil(item.qty), addNext);
     }
     addNext();
@@ -567,6 +677,34 @@ window.esailsZonweringWizard = (function () {
     return input;
   }
 
+  /* Zet de zichtbare wizard-UI gelijk aan de huidige draft-state.
+     Nodig bij 'nog een opening toevoegen' en bij 'wijzig'. */
+  function herstelDraftUI() {
+    // Sliders + labels
+    ['breedte', 'hoogte', 'aantal'].forEach(function (k) {
+      var sl = $('ezSlider_' + k); if (sl) sl.value = state[k];
+      var lb = $('ezVal_' + k); if (lb) lb.textContent = state[k];
+    });
+    // Kaart-selecties (toepassing, kleur, afwerking)
+    root.querySelectorAll('.esails-selection-card, .esails-color-card').forEach(function (c) {
+      c.classList.remove('selected');
+    });
+    ['toepassing', 'kleur', 'afwerking'].forEach(function (group) {
+      if (!state[group]) return;
+      var c = root.querySelector('[data-group="' + group + '"][data-value="' + state[group] + '"]');
+      if (c) c.classList.add('selected');
+    });
+    // Reiniger-toggle
+    var tog = $('ezToggleReiniger');
+    if (tog) {
+      tog.classList.toggle('active', state.wil_reiniger);
+      tog.classList.toggle('esails-toggle-off', !state.wil_reiniger);
+      tog.innerHTML = state.wil_reiniger ? '<span class="esails-check">✓</span> Toegevoegd' : 'Toevoegen';
+    }
+    renderContext();
+    renderPreview();
+  }
+
   /* -------------------- INIT -------------------- */
   function init() {
     root = $('esails-zonwering-mount');
@@ -598,13 +736,28 @@ window.esailsZonweringWizard = (function () {
       '.esails-stat small{display:block;font-size:12px;color:var(--esails-muted);}' +
       '.esails-stat strong{display:block;font-size:17px;font-weight:600;margin-top:6px;color:var(--esails-dark);}' +
       '.esails-help-note{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:16px 20px;font-size:13.5px;color:var(--esails-muted);line-height:1.6;max-width:600px;margin:8px auto 0;}' +
-      '.esails-help-note strong{color:var(--esails-dark);}';
+      '.esails-help-note strong{color:var(--esails-dark);}' +
+      /* Opening-blokken op het pakket-scherm */
+      '.esails-opening-block{border:1px solid var(--esails-border,#e2e2e2);border-radius:var(--esails-radius,8px);margin-bottom:18px;overflow:hidden;}' +
+      '.esails-opening-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;background:var(--esails-light,#f6f6f4);border-bottom:1px solid var(--esails-border,#e2e2e2);}' +
+      '.esails-opening-title{font-weight:600;font-size:14.5px;color:var(--esails-dark,#111);}' +
+      '.esails-opening-actions{display:flex;gap:8px;flex-shrink:0;}' +
+      '.esails-opening-edit,.esails-opening-remove{background:none;border:1px solid var(--esails-border,#ccc);border-radius:6px;padding:5px 12px;font-size:12.5px;cursor:pointer;color:var(--esails-muted,#555);transition:all .15s ease;}' +
+      '.esails-opening-edit:hover{border-color:var(--esails-dark,#111);color:var(--esails-dark,#111);}' +
+      '.esails-opening-remove:hover{border-color:#c0392b;color:#c0392b;}' +
+      '.esails-opening-block .esails-line-item{padding:12px 18px;}' +
+      '.esails-line-qty{min-width:64px;text-align:right;font-size:13.5px;color:var(--esails-muted,#555);}' +
+      '.esails-line-controls{display:flex;align-items:center;gap:18px;}' +
+      '.esails-opening-subtotal{text-align:right;padding:10px 18px;font-size:13px;color:var(--esails-muted,#555);border-top:1px dashed var(--esails-border,#e2e2e2);}' +
+      '.esails-opening-subtotal strong{color:var(--esails-dark,#111);font-size:14.5px;}' +
+      '.esails-add-opening{margin:6px 0 22px;text-align:center;}' +
+      '.esails-add-opening .esails-btn{width:100%;}';
     var style = document.createElement('style');
     style.id = 'ezPreviewCSS'; style.textContent = css;
     document.head.appendChild(style);
   }
 
-  return { init: init, _bereken: bereken, _bouwBundle: bouwBundle, _resetState: resetState, _state: function(){return state;} };
+  return { init: init, _bereken: bereken, _bouwBundleVoor: bouwBundleVoor, _geaggregeerd: geaggregeerdeRegels, _slaOpeningOp: slaOpeningOp, _nieuweOpening: nieuweOpening, _bewerkOpening: bewerkOpening, _resetState: resetState, _state: function(){return state;} };
 })();
 
 (function () {
