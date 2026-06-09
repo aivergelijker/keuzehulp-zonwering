@@ -8,7 +8,7 @@
    (.esails-preview-* + mount-reset) voor de live visualisatie.
 
    MOUNT: <div id="esails-zonwering-mount"></div>  (eigen id — botst niet)
-   CART : form-POST naar /cart (product + quantity) via verborgen iframe.
+   CART : form-POST naar /cart/add/<id>/ (quantity) via verborgen iframe.
 
    TE DOEN: vervang elke "ID_..." en placeholder-prijs door de echte
    Lightspeed product-ID's en prijzen in CONFIG hieronder. Bevestig ook
@@ -26,13 +26,13 @@ window.esailsZonweringWizard = (function () {
       zand:      { id: "ID_DOEK_ZAND",      naam: "Soltis-gaasdoek — Zand",      prijs: 24.95, unit: "meter" },
       grijs:     { id: "ID_DOEK_GRIJS",     naam: "Soltis-gaasdoek — Lichtgrijs", prijs: 24.95, unit: "meter" }
     },
-    zuignap:  { id: "ID_ZUIGNAP_50MM",  naam: "Zuignap met lip 50 mm (transparant, M4)", prijs: 1.67, unit: "stuk" },
-    zeilring: { id: "ID_ZEILRING_DIN10", naam: "Zeilring DIN 10 (RVS)",                   prijs: 0.45, unit: "stuk" },
-    montageset: { id: "ID_MONTAGESET", naam: "Montageset: holpijp + stempel (+ gratis stansblok)", prijs: 24.95, unit: "set" },
-    shockcord: { id: "ID_SHOCKCORD", naam: "Elastisch koord (shockcord) 6 mm", prijs: 1.35, unit: "meter" },
-    koordhaak: { id: "ID_KOORDHAAK", naam: "Koordhaak",                          prijs: 0.85, unit: "stuk" },
+    zuignap:  { id: "314190231",  naam: "Zuignap met lip 50 mm (transparant, M4)", prijs: 1.67, unit: "stuk" },
+    zeilring: { id: "260094625", naam: "Zeilring DIN 10 (RVS)",                   prijs: 0.45, unit: "stuk" },
+    montageset: { id: "313445757", naam: "Montageset: holpijp + stempel (+ gratis stansblok)", prijs: 59.25, unit: "set" },
+    shockcord: { id: "259527665", naam: "Elastisch koord (shockcord) 6 mm", prijs: 0.83, unit: "meter" },
+    koordhaak: { id: "259140865", naam: "Musketonhaak 6 mm (nylon, zwart)",     prijs: 0.49, unit: "stuk" },
     zoomband:  { id: "ID_ZOOMBAND", naam: "Zoomband (randversteviging)",          prijs: 1.95, unit: "meter" },
-    reiniger:  { id: "ID_REINIGER", naam: "Serge Ferrari originele doekreiniger", prijs: 19.95, unit: "stuk" }
+    reiniger:  { id: "259191434", naam: "Serge Ferrari originele doekreiniger", prijs: 28.95, unit: "stuk" }
   };
 
   var REKEN = {
@@ -313,7 +313,7 @@ window.esailsZonweringWizard = (function () {
     var x = (VW - w) / 2, y = (VH - hh) / 2;
     var ease = 'transition:all .4s ease;';
 
-    var svg = '<svg viewBox="0 0 ' + VW + ' ' + VH + '" width="100%" style="max-width:320px;display:block;margin:0 auto;">';
+    var svg = '<svg viewBox="0 0 ' + VW + ' ' + VH + '" width="100%" style="max-width:200px;display:block;margin:0 auto;">';
     svg += '<defs>' +
       '<filter id="ezShadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f1c3f" flood-opacity="0.16"/></filter>' +
       '<pattern id="ezMesh" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 0 H5 M0 0 V5" stroke="#000" stroke-width="0.4" opacity="0.18"/></pattern>' +
@@ -656,8 +656,8 @@ window.esailsZonweringWizard = (function () {
   }
   function postOne(iframe, productId, quantity, onDone) {
     var form = document.createElement('form');
-    form.method = 'POST'; form.action = '/cart'; form.target = 'ezCartFrame'; form.style.display = 'none';
-    form.appendChild(hidden('product', productId));
+    // Lightspeed verwacht het product-ID in het URL-pad: POST /cart/add/<id>/ met veld 'quantity'
+    form.method = 'POST'; form.action = '/cart/add/' + productId + '/'; form.target = 'ezCartFrame'; form.style.display = 'none';
     form.appendChild(hidden('quantity', quantity));
     document.body.appendChild(form);
     var done = false;
@@ -728,10 +728,10 @@ window.esailsZonweringWizard = (function () {
     var css =
       '#esails-zonwering-mount,#esails-zonwering-mount *{box-sizing:border-box;}' +
       '#esails-zonwering-mount{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:block;max-width:900px;margin:40px auto;padding:30px;background:#ffffff;border:1px solid var(--esails-border,#e2e2e2);border-radius:var(--esails-radius,8px);color:var(--esails-dark,#111);box-shadow:0 4px 20px rgba(0,0,0,0.02);}' +
-      '.esails-preview{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:32px 24px;margin-bottom:40px;}' +
-      '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:20px;}' +
-      '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:200px;}' +
-      '.esails-preview-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px;}' +
+      '.esails-preview{position:sticky;top:8px;z-index:5;background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:16px 20px;margin-bottom:20px;box-shadow:0 6px 16px rgba(0,0,0,0.06);}' +
+      '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:10px;}' +
+      '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:130px;}' +
+      '.esails-preview-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:14px;}' +
       '.esails-stat{flex:1;min-width:110px;max-width:170px;background:#fff;border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:14px 10px;text-align:center;}' +
       '.esails-stat small{display:block;font-size:12px;color:var(--esails-muted);}' +
       '.esails-stat strong{display:block;font-size:17px;font-weight:600;margin-top:6px;color:var(--esails-dark);}' +
