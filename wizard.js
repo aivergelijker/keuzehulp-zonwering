@@ -735,6 +735,8 @@ window.esailsZonweringWizard = (function () {
       '.esails-stat{flex:1;min-width:110px;max-width:170px;background:#fff;border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:14px 10px;text-align:center;}' +
       '.esails-stat small{display:block;font-size:12px;color:var(--esails-muted);}' +
       '.esails-stat strong{display:block;font-size:17px;font-weight:600;margin-top:6px;color:var(--esails-dark);}' +
+      /* Mobiel: 3 stat-cards naast elkaar i.p.v. gestapeld, zodat de preview compact blijft */
+      '@media(max-width:480px){.esails-preview-stats{gap:8px;}.esails-stat{min-width:0;flex:1 1 0;padding:10px 6px;}.esails-stat small{font-size:11px;}.esails-stat strong{font-size:15px;}}' +
       '.esails-help-note{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:16px 20px;font-size:13.5px;color:var(--esails-muted);line-height:1.6;max-width:600px;margin:8px auto 0;}' +
       '.esails-help-note strong{color:var(--esails-dark);}' +
       /* Opening-blokken op het pakket-scherm */
